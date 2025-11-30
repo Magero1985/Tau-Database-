@@ -1197,23 +1197,54 @@ window.addEventListener('message', function(event) {
 
         // Member Portal functions
         function memberLogin(event) {
-            event.preventDefault();
-            const identifier = document.getElementById('memberIdentifier').value;
-            const phone = document.getElementById('memberPhone').value;
-            
-            const member = membersDB.find(m => 
-                (m.id === identifier || m.email === identifier) && 
-                m.phone.slice(-4) === phone
-            );
-            
-            if (member) {
-                currentMemberSession = member;
-                displayMemberDashboard(member);
-                showNotification('✅ Login successful!', 'success');
-            } else {
-                showNotification('❌ Invalid credentials', 'error');
-            }
-        }
+    event.preventDefault();
+    const identifier = document.getElementById('memberIdentifier').value.trim();
+    const phone = document.getElementById('memberPhone').value.trim();
+    
+    console.log('🔍 Login attempt:', { identifier, phone });
+    console.log('📊 Total members in DB:', membersDB.length);
+    
+    // Try multiple matching strategies
+    let member = null;
+    
+    // Strategy 1: Exact ID match
+    member = membersDB.find(m => m.id === identifier);
+    
+    // Strategy 2: Email match with phone verification
+    if (!member) {
+        member = membersDB.find(m => 
+            m.email.toLowerCase() === identifier.toLowerCase() && 
+            m.phone.slice(-4) === phone
+        );
+    }
+    
+    // Strategy 3: ID match with phone verification
+    if (!member) {
+        member = membersDB.find(m => 
+            m.id === identifier && 
+            m.phone.slice(-4) === phone
+        );
+    }
+    
+    // Strategy 4: Partial phone match (if they entered full number)
+    if (!member && phone.length > 4) {
+        member = membersDB.find(m => 
+            (m.id === identifier || m.email.toLowerCase() === identifier.toLowerCase()) &&
+            m.phone.includes(phone)
+        );
+    }
+    
+    if (member) {
+        console.log('✅ Member found:', member.id);
+        currentMemberSession = member;
+        displayMemberDashboard(member);
+        showNotification('✅ Login successful!', 'success');
+    } else {
+        console.log('❌ No member found with credentials');
+        console.log('Available IDs:', membersDB.map(m => m.id).join(', '));
+        showNotification('❌ Invalid credentials. Please check your Member ID/Email and phone number.', 'error');
+    }
+}
 
         function displayMemberDashboard(member) {
             document.getElementById('memberPortal').style.display = 'none';
@@ -1404,13 +1435,18 @@ window.addEventListener('message', function(event) {
             }
 
             member.id = generateMemberID(member.team);
-            member.dateJoined = new Date().toISOString().split('T')[0];
-            member.status = 'Active';
-            member.paymentStatus = emailText.includes('PAYMENT CONFIRMED') ? 'Paid' : 'Pending';
+member.dateJoined = new Date().toISOString().split('T')[0];
+member.status = 'Active';
+member.paymentStatus = emailText.includes('PAYMENT CONFIRMED') ? 'Paid' : 'Pending';
 
-            parsedMemberData = member;
-            displayParsedPreview(member);
-        }
+// CRITICAL: Add phone auth for member login
+if (member.phone) {
+    member.phoneAuth = member.phone.slice(-4);
+}
+
+parsedMemberData = member;
+displayParsedPreview(member);
+console.log('✅ Parsed member with phoneAuth:', member.phoneAuth);
 
         // Display parsed preview
         function displayParsedPreview(member) {
