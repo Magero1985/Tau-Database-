@@ -1951,6 +1951,769 @@ window.addEventListener('message', function(event) {
                 console.log('Auto-backup check...');
             }
         }, 300000);
+        // ===== DATABASE ENHANCEMENTS =====
+// Add these functions to your Tau Database.html file
+
+// AUTO-CAPTURE NEW REGISTRATIONS FROM MAIN APP
+function setupAutoCapture() {
+    // Listen for new member events from Main App
+    window.addEventListener('tauMemberAdded', function(event) {
+        const member = event.detail;
+        console.log('📥 Auto-capturing new member:', member.id);
+        
+        // Check if member already exists
+        const existingIndex = membersDB.findIndex(m => m.id === member.id);
+        
+        if (existingIndex === -1) {
+            // Add new member
+            membersDB.push(member);
+            saveDatabase();
+            renderMembers();
+            updateStats();
+            
+            // Send notification
+            showNotification(`✅ New member auto-captured: ${member.fullName} (${member.id})`, 'success');
+            
+            // Send welcome email
+            if (localStorage.getItem('autoEmail') !== 'false') {
+                sendWelcomeEmail(member);
+            }
+            
+            // Notify admin
+            if (localStorage.getItem('adminNotify') !== 'false') {
+                notifyAdminNewMember(member);
+            }
+        } else {
+            console.log('Member already exists, updating...');
+            membersDB[existingIndex] = member;
+            saveDatabase();
+        }
+    });
+    
+    // Setup periodic sync check (every 30 seconds)
+    setInterval(() => {
+        syncFromMainApp();
+    }, 30000);
+    
+    console.log('✅ Auto-capture system activated');
+}
+
+// Sync from Main App database
+function syncFromMainApp() {
+    try {
+        const mainAppMembers = JSON.parse(localStorage.getItem('tauAfricaDB') || '[]');
+        let newCount = 0;
+        
+        mainAppMembers.forEach(mainMember => {
+            const exists = membersDB.find(m => m.id === mainMember.id);
+            if (!exists) {
+                membersDB.push(mainMember);
+                newCount++;
+            }
+        });
+        
+        if (newCount > 0) {
+            saveDatabase();
+            renderMembers();
+            updateStats();
+            console.log(`🔄 Synced ${newCount} new members from Main App`);
+        }
+    } catch (error) {
+        console.error('Sync error:', error);
+    }
+}
+
+// Notify admin of new member
+function notifyAdminNewMember(member) {
+    const adminEmail = localStorage.getItem('orgEmail') || 'grouptauafrica@gmail.com';
+    
+    emailjs.send(localStorage.getItem('emailServiceId') || 'service_xfira7g', 
+                 localStorage.getItem('emailTemplateId') || 'template_bqxztig', {
+        to_email: adminEmail,
+        to_name: 'TAU Africa Admin',
+        subject: '🎉 New Member Registration',
+        message: `
+New member registered:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Name: ${member.fullName}
+Member ID: ${member.id}
+Team: ${member.team}
+Email: ${member.email}
+Phone: ${member.phone}
+Location: ${member.location}
+Payment: ${member.paymentStatus}
+Date: ${member.dateJoined}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Referral Code: ${member.referralCode}
+${member.referredBy ? `Referred by: ${member.referredBy}` : ''}
+
+View in database: [Your Database URL]
+        `
+    }).catch(err => console.error('Admin notification error:', err));
+}
+
+// ENHANCED MEMBER PORTAL IN DATABASE
+function enhancedMemberDashboard(member) {
+    return `
+        <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+            <!-- Header -->
+            <div style="background: linear-gradient(45deg, #4169e1, #87ceeb); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px;">
+                <h1>Welcome, ${member.fullName}! 👋</h1>
+                <p style="margin: 10px 0 0 0;">Member ID: <strong>${member.id}</strong> | Team: <strong>${member.team}</strong></p>
+            </div>
+            
+            <!-- Quick Stats -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                <div style="background: linear-gradient(135deg, #ffd700, #ffed4e); padding: 20px; border-radius: 10px; text-align: center;">
+                    <h2 style="margin: 0; color: #333;">${member.iKbpBalance || 0}</h2>
+                    <p style="margin: 5px 0 0 0; color: #333;">iKbp Balance</p>
+                </div>
+                <div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 20px; border-radius: 10px; text-align: center; color: white;">
+                    <h2 style="margin: 0;">${(member.tasks || []).length}</h2>
+                    <p style="margin: 5px 0 0 0;">Active Tasks</p>
+                </div>
+                <div style="background: linear-gradient(135deg, #ff6b6b, #ee5a24); padding: 20px; border-radius: 10px; text-align: center; color: white;">
+                    <h2 style="margin: 0;">${(member.activities || []).length}</h2>
+                    <p style="margin: 5px 0 0 0;">Activities</p>
+                </div>
+                <div style="background: linear-gradient(135deg, #2ecc71, #27ae60); padding: 20px; border-radius: 10px; text-align: center; color: white;">
+                    <h2 style="margin: 0;">${getReferralCount(member.id)}</h2>
+                    <p style="margin: 5px 0 0 0;">Referrals</p>
+                </div>
+            </div>
+            
+            <!-- Complete Profile -->
+            <div style="background: white; padding: 25px; border-radius: 15px; border: 2px solid #eee; margin-bottom: 20px;">
+                <h3 style="color: #2a5298; margin-bottom: 20px;">Complete Profile</h3>
+                ${generateMemberProfile(member)}
+            </div>
+            
+            <!-- Activity Tracker -->
+            <div style="background: white; padding: 25px; border-radius: 15px; border: 2px solid #eee; margin-bottom: 20px;">
+                <h3 style="color: #2a5298; margin-bottom: 20px;">My Activities</h3>
+                ${generateActivityTracker(member)}
+            </div>
+            
+            <!-- Task Manager -->
+            <div style="background: white; padding: 25px; border-radius: 15px; border: 2px solid #eee; margin-bottom: 20px;">
+                <h3 style="color: #2a5298; margin-bottom: 20px;">My Tasks</h3>
+                ${generateTaskManager(member)}
+            </div>
+            
+            <!-- Quick Actions -->
+            <div style="background: #f8f9fa; padding: 25px; border-radius: 15px;">
+                <h3 style="color: #2a5298; margin-bottom: 20px;">Quick Actions</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <button class="btn" onclick="backToMainApp()">🏠 Main Portal</button>
+                    <button class="btn btn-success" onclick="window.open('https://magero1985.github.io/Kabiru-Mining-Portal-/', '_blank')">⚡ Kabiru Mining</button>
+                    <button class="btn" onclick="downloadMemberData()">📥 Export My Data</button>
+                    <button class="btn" onclick="memberLogout()">🚪 Logout</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Generate member profile display
+function generateMemberProfile(member) {
+    const fields = [
+        { label: 'Member ID', value: member.id },
+        { label: 'Full Name', value: member.fullName },
+        { label: 'Email', value: member.email },
+        { label: 'Phone', value: member.phone },
+        { label: 'Location', value: member.location },
+        { label: 'Team', value: member.team },
+        { label: 'Date Joined', value: member.dateJoined },
+        { label: 'Status', value: member.status },
+        { label: 'Payment Status', value: member.paymentStatus },
+        { label: 'Referral Code', value: member.referralCode }
+    ];
+    
+    return `
+        <div style="display: grid; gap: 10px;">
+            ${fields.map(field => `
+                <div style="display: grid; grid-template-columns: 150px 1fr; padding: 10px; border-bottom: 1px solid #eee;">
+                    <strong style="color: #2a5298;">${field.label}:</strong>
+                    <span>${field.value || 'N/A'}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Generate activity tracker
+function generateActivityTracker(member) {
+    const activities = member.activities || [];
+    
+    if (activities.length === 0) {
+        return '<p style="color: #999; text-align: center;">No activities enrolled yet</p>';
+    }
+    
+    return `
+        <div style="display: grid; gap: 10px;">
+            ${activities.map(activity => `
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 10px;">
+                    <h4 style="margin: 0 0 10px 0; color: #2a5298;">${activity.type}</h4>
+                    <p style="margin: 0; color: #666;">${activity.description}</p>
+                    <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #999;">
+                        Started: ${new Date(activity.dateAdded).toLocaleDateString()} | 
+                        Status: <span style="color: #2ecc71;">${activity.status}</span>
+                    </p>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// Generate task manager
+function generateTaskManager(member) {
+    const tasks = member.tasks || [];
+    
+    if (tasks.length === 0) {
+        return '<p style="color: #999; text-align: center;">No tasks assigned yet</p>';
+    }
+    
+    const activeTasks = tasks.filter(t => t.status !== 'Completed');
+    const completedTasks = tasks.filter(t => t.status === 'Completed');
+    
+    return `
+        ${activeTasks.length > 0 ? `
+            <h4 style="color: #2a5298; margin-bottom: 15px;">Active Tasks (${activeTasks.length})</h4>
+            <div style="display: grid; gap: 10px; margin-bottom: 20px;">
+                ${activeTasks.map(task => `
+                    <div style="padding: 15px; background: #e3f2fd; border-radius: 10px;">
+                        <h4 style="margin: 0 0 10px 0; color: #1976d2;">${task.title}</h4>
+                        <p style="margin: 0; color: #666;">${task.description}</p>
+                        <p style="margin: 10px 0 0 0; color: #ffd700; font-weight: bold;">
+                            💰 Reward: ${task.iKbpReward} iKbp
+                        </p>
+                    </div>
+                `).join('')}
+            </div>
+        ` : ''}
+        
+        ${completedTasks.length > 0 ? `
+            <h4 style="color: #2a5298; margin-bottom: 15px;">Completed Tasks (${completedTasks.length})</h4>
+            <div style="display: grid; gap: 10px;">
+                ${completedTasks.map(task => `
+                    <div style="padding: 15px; background: #c8e6c9; border-radius: 10px;">
+                        <h4 style="margin: 0 0 10px 0; color: #2e7d32;">${task.title}</h4>
+                        <p style="margin: 0; color: #666;">✓ Completed ${new Date(task.completedDate).toLocaleDateString()}</p>
+                        <p style="margin: 10px 0 0 0; color: #2e7d32; font-weight: bold;">
+                            💰 Earned: ${task.iKbpReward} iKbp
+                        </p>
+                    </div>
+                `).join('')}
+            </div>
+        ` : ''}
+    `;
+}
+
+// Get referral count
+function getReferralCount(memberId) {
+    const referrals = JSON.parse(localStorage.getItem('tauReferrals') || '{}');
+    return referrals[memberId]?.referredMembers?.length || 0;
+}
+
+// Back to main app
+function backToMainApp() {
+    window.close();
+    // Or provide link
+    const mainUrl = prompt('Enter Main App URL:', window.location.origin);
+    if (mainUrl) {
+        window.open(mainUrl, '_blank');
+    }
+}
+
+// Download member data
+function downloadMemberData() {
+    const member = currentMemberSession;
+    if (!member) return;
+    
+    const data = JSON.stringify(member, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TAU_Africa_${member.id}_data.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showNotification('✅ Your data has been downloaded', 'success');
+}
+
+// UPDATE EXISTING MEMBER LOGIN TO USE ENHANCED DASHBOARD
+function memberLogin(event) {
+    event.preventDefault();
+    const identifier = document.getElementById('memberIdentifier').value;
+    const phone = document.getElementById('memberPhone').value;
+    
+    const member = membersDB.find(m => 
+        (m.id === identifier || m.email === identifier) && 
+        m.phone.slice(-4) === phone
+    );
+    
+    if (member) {
+        currentMemberSession = member;
+        document.getElementById('memberPortal').style.display = 'none';
+        document.getElementById('memberDashboard').style.display = 'block';
+        
+        // Use enhanced dashboard
+        document.getElementById('memberDashboard').innerHTML = `
+            <div class="container">
+                <div class="header">
+                    <h1>🌍 TAU AFRICA MEMBER PORTAL</h1>
+                    <button onclick="memberLogout()" class="btn btn-small">Logout</button>
+                </div>
+                ${enhancedMemberDashboard(member)}
+            </div>
+        `;
+        
+        showNotification('✅ Login successful!', 'success');
+    } else {
+        showNotification('❌ Invalid credentials', 'error');
+    }
+}
+
+// INITIALIZE ON LOAD
+window.addEventListener('load', function() {
+    setupAutoCapture();
+    syncFromMainApp(); // Initial sync
+    console.log('✅ Database Auto-Capture & Sync Enabled');
+    console.log('✅ Enhanced Member Portal Ready');
+});
+
+// AUTO-SYNC EVERY 5 MINUTES
+setInterval(() => {
+    syncFromMainApp();
+}, 300000);
+
+console.log('✅ Database Enhancements Loaded');
+        // ===== ADDITIONAL UTILITIES & HELPER FUNCTIONS =====
+// Add these to BOTH Main App and Database for enhanced functionality
+
+// ===== DATA VALIDATION =====
+
+// Validate phone number
+function validatePhone(phone) {
+    const pattern = /^254[0-9]{9}$/;
+    if (!pattern.test(phone)) {
+        return {
+            valid: false,
+            message: 'Phone must be in format: 254XXXXXXXXX (Kenyan format)'
+        };
+    }
+    return { valid: true };
+}
+
+// Validate email
+function validateEmail(email) {
+    const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!pattern.test(email)) {
+        return { valid: false, message: 'Invalid email format' };
+    }
+    return { valid: true };
+}
+
+// Validate Member ID format
+function validateMemberID(id) {
+    const pattern = /^(TSK|TLK|JOB)-[0-9]{6}-[0-9]{3}$/;
+    return pattern.test(id);
+}
+
+// ===== DATA EXPORT UTILITIES =====
+
+// Export member data as PDF-ready format
+function generateMemberPDF(member) {
+    const data = `
+TAU AFRICA INTERNATIONAL
+MEMBER CERTIFICATE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MEMBER INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Member ID: ${member.id}
+Name: ${member.fullName}
+Team: ${member.team}
+Email: ${member.email}
+Phone: ${member.phone}
+Location: ${member.location}
+
+Date Joined: ${member.dateJoined}
+Status: ${member.status}
+Payment Status: ${member.paymentStatus}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFERRAL INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Referral Code: ${member.referralCode}
+Referral Link: ${window.location.origin}?ref=${member.referralCode}
+
+Earn 500 iKbp (50 KSH) for each successful referral!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACCOUNT SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+iKbp Balance: ${member.iKbpBalance || 0} iKbp
+Cash Value: KSH ${((member.iKbpBalance || 0) / 10).toFixed(2)}
+
+Active Tasks: ${(member.tasks || []).filter(t => t.status !== 'Completed').length}
+Completed Tasks: ${(member.tasks || []).filter(t => t.status === 'Completed').length}
+
+Activities: ${(member.activities || []).length}
+Jobs Posted: ${JSON.parse(localStorage.getItem('tauJobsPortal') || '[]').filter(j => j.posterId === member.id).length}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This certifies that the above named person is a registered
+member of TAU Africa International in good standing.
+
+Issued: ${new Date().toLocaleDateString()}
+
+TAU Africa Foundation
+Building Africa's Future Together
+grouptauafrica@gmail.com
+    `;
+    
+    return data;
+}
+
+// Download member certificate
+function downloadMemberCertificate() {
+    const member = window.TauDB.getCurrentMember();
+    if (!member) {
+        showNotification('Please login first', 'error');
+        return;
+    }
+    
+    const certificate = generateMemberPDF(member);
+    const blob = new Blob([certificate], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TAU_Africa_Certificate_${member.id}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showNotification('✅ Certificate downloaded!', 'success');
+}
+
+// ===== STATISTICS & ANALYTICS =====
+
+// Calculate member statistics
+function getMemberStats(memberId) {
+    const member = window.TauDB.getCurrentMember() || 
+                  JSON.parse(localStorage.getItem('tauAfricaDB') || '[]').find(m => m.id === memberId);
+    
+    if (!member) return null;
+    
+    const tasksCompleted = (member.tasks || []).filter(t => t.status === 'Completed').length;
+    const tasksPending = (member.tasks || []).filter(t => t.status !== 'Completed').length;
+    const totaliKbpEarned = (member.tasks || [])
+        .filter(t => t.status === 'Completed')
+        .reduce((sum, t) => sum + (t.iKbpReward || 0), 0);
+    
+    const referralData = JSON.parse(localStorage.getItem('tauReferrals') || '{}');
+    const myReferrals = referralData[memberId] || { referredMembers: [], totalEarnings: 0 };
+    
+    const jobsPosted = JSON.parse(localStorage.getItem('tauJobsPortal') || '[]')
+        .filter(j => j.posterId === memberId).length;
+    
+    return {
+        member: {
+            id: member.id,
+            name: member.fullName,
+            team: member.team,
+            joinDate: member.dateJoined,
+            daysActive: Math.floor((Date.now() - new Date(member.accountCreated).getTime()) / (1000 * 60 * 60 * 24))
+        },
+        ikbp: {
+            balance: member.iKbpBalance || 0,
+            cashValue: ((member.iKbpBalance || 0) / 10).toFixed(2),
+            earnedFromTasks: totaliKbpEarned,
+            earnedFromReferrals: myReferrals.totalEarnings,
+            earnedFromJobs: jobsPosted * 50
+        },
+        tasks: {
+            total: (member.tasks || []).length,
+            completed: tasksCompleted,
+            pending: tasksPending,
+            completionRate: tasksCompleted > 0 ? ((tasksCompleted / (member.tasks || []).length) * 100).toFixed(1) : 0
+        },
+        activities: {
+            total: (member.activities || []).length,
+            active: (member.activities || []).filter(a => a.status === 'Active').length
+        },
+        referrals: {
+            total: myReferrals.referredMembers.length,
+            earnings: myReferrals.totalEarnings,
+            potential: `${myReferrals.referredMembers.length * 500} iKbp earned`
+        },
+        jobs: {
+            posted: jobsPosted,
+            earningsFromPosting: jobsPosted * 50
+        }
+    };
+}
+
+// Display member stats
+function displayMemberStats() {
+    const member = window.TauDB.getCurrentMember();
+    if (!member) {
+        showNotification('Please login first', 'error');
+        return;
+    }
+    
+    const stats = getMemberStats(member.id);
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+            <h2>📊 My Statistics</h2>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
+                <!-- iKbp Stats -->
+                <div style="background: linear-gradient(135deg, #ffd700, #ffed4e); padding: 20px; border-radius: 10px;">
+                    <h3 style="color: #333; margin: 0 0 10px 0;">💰 iKbp Earnings</h3>
+                    <p style="color: #333; margin: 5px 0;"><strong>Balance:</strong> ${stats.ikbp.balance} iKbp</p>
+                    <p style="color: #333; margin: 5px 0;"><strong>Cash Value:</strong> KSH ${stats.ikbp.cashValue}</p>
+                    <p style="color: #333; margin: 5px 0; font-size: 0.9rem;">From Tasks: ${stats.ikbp.earnedFromTasks}</p>
+                    <p style="color: #333; margin: 5px 0; font-size: 0.9rem;">From Referrals: ${stats.ikbp.earnedFromReferrals}</p>
+                    <p style="color: #333; margin: 5px 0; font-size: 0.9rem;">From Jobs: ${stats.ikbp.earnedFromJobs}</p>
+                </div>
+                
+                <!-- Tasks Stats -->
+                <div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 20px; border-radius: 10px; color: white;">
+                    <h3 style="margin: 0 0 10px 0;">✅ Tasks Performance</h3>
+                    <p style="margin: 5px 0;"><strong>Total:</strong> ${stats.tasks.total}</p>
+                    <p style="margin: 5px 0;"><strong>Completed:</strong> ${stats.tasks.completed}</p>
+                    <p style="margin: 5px 0;"><strong>Pending:</strong> ${stats.tasks.pending}</p>
+                    <p style="margin: 5px 0;"><strong>Success Rate:</strong> ${stats.tasks.completionRate}%</p>
+                </div>
+                
+                <!-- Referrals Stats -->
+                <div style="background: linear-gradient(135deg, #2ecc71, #27ae60); padding: 20px; border-radius: 10px; color: white;">
+                    <h3 style="margin: 0 0 10px 0;">🎁 Referrals</h3>
+                    <p style="margin: 5px 0;"><strong>Total:</strong> ${stats.referrals.total}</p>
+                    <p style="margin: 5px 0;"><strong>Earnings:</strong> ${stats.referrals.earnings} iKbp</p>
+                    <p style="margin: 5px 0; font-size: 0.9rem;">${stats.referrals.potential}</p>
+                    <button class="btn" onclick="copyReferralLink('${member.referralCode}')" style="margin-top: 10px; width: 100%;">
+                        Share Link
+                    </button>
+                </div>
+                
+                <!-- Activity Stats -->
+                <div style="background: linear-gradient(135deg, #ff6b6b, #ee5a24); padding: 20px; border-radius: 10px; color: white;">
+                    <h3 style="margin: 0 0 10px 0;">📚 Activities</h3>
+                    <p style="margin: 5px 0;"><strong>Total:</strong> ${stats.activities.total}</p>
+                    <p style="margin: 5px 0;"><strong>Active:</strong> ${stats.activities.active}</p>
+                    <p style="margin: 5px 0;"><strong>Jobs Posted:</strong> ${stats.jobs.posted}</p>
+                </div>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                <h4 style="color: #2a5298; margin-bottom: 10px;">Account Summary</h4>
+                <p><strong>Member Since:</strong> ${stats.member.joinDate} (${stats.member.daysActive} days)</p>
+                <p><strong>Team:</strong> ${stats.member.team}</p>
+                <p><strong>Total iKbp Balance:</strong> ${stats.ikbp.balance} iKbp (KSH ${stats.ikbp.cashValue})</p>
+            </div>
+            
+            <div style="margin-top: 20px; text-align: center;">
+                <button class="btn" onclick="downloadMemberCertificate()">📥 Download Certificate</button>
+                <button class="btn btn-success" onclick="window.open('https://magero1985.github.io/Kabiru-Mining-Portal-/', '_blank')">
+                    ⚡ Convert to Kabiru
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+// ===== NOTIFICATION SYSTEM =====
+
+// Queue for notifications
+let notificationQueue = [];
+let isShowingNotification = false;
+
+// Enhanced notification with queue
+function showNotificationQueued(message, type = 'success', duration = 5000) {
+    notificationQueue.push({ message, type, duration });
+    processNotificationQueue();
+}
+
+function processNotificationQueue() {
+    if (isShowingNotification || notificationQueue.length === 0) return;
+    
+    isShowingNotification = true;
+    const { message, type, duration } = notificationQueue.shift();
+    
+    const notif = document.getElementById('notification');
+    notif.innerHTML = message;
+    notif.className = `notification ${type}`;
+    notif.style.display = 'block';
+    
+    setTimeout(() => {
+        notif.style.display = 'none';
+        isShowingNotification = false;
+        processNotificationQueue();
+    }, duration);
+}
+
+// ===== LOCAL STORAGE MANAGEMENT =====
+
+// Backup all data
+function backupAllData() {
+    const backup = {
+        timestamp: new Date().toISOString(),
+        members: localStorage.getItem('tauAfricaDB'),
+        credentials: localStorage.getItem('tauCredentials'),
+        referrals: localStorage.getItem('tauReferrals'),
+        jobs: localStorage.getItem('tauJobsPortal'),
+        settings: {
+            emailServiceId: localStorage.getItem('emailServiceId'),
+            emailTemplateId: localStorage.getItem('emailTemplateId'),
+            orgEmail: localStorage.getItem('orgEmail'),
+            webhookUrl: localStorage.getItem('webhookUrl')
+        }
+    };
+    
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TAU_Africa_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showNotification('✅ Complete backup created!', 'success');
+}
+
+// Restore from backup
+function restoreFromBackup(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const backup = JSON.parse(e.target.result);
+            
+            if (confirm('⚠️ This will replace all current data. Continue?')) {
+                localStorage.setItem('tauAfricaDB', backup.members);
+                localStorage.setItem('tauCredentials', backup.credentials);
+                localStorage.setItem('tauReferrals', backup.referrals);
+                localStorage.setItem('tauJobsPortal', backup.jobs);
+                
+                if (backup.settings) {
+                    Object.keys(backup.settings).forEach(key => {
+                        if (backup.settings[key]) {
+                            localStorage.setItem(key, backup.settings[key]);
+                        }
+                    });
+                }
+                
+                showNotification('✅ Backup restored! Refreshing...', 'success');
+                setTimeout(() => window.location.reload(), 2000);
+            }
+        } catch (error) {
+            showNotification('❌ Invalid backup file', 'error');
+        }
+    };
+    reader.readAsText(file);
+}
+
+// ===== DATA CLEANUP =====
+
+// Remove inactive members (optional utility)
+function cleanupInactiveMembers(daysInactive = 90) {
+    const cutoffDate = Date.now() - (daysInactive * 24 * 60 * 60 * 1000);
+    const members = JSON.parse(localStorage.getItem('tauAfricaDB') || '[]');
+    
+    const active = members.filter(m => {
+        const lastActive = m.lastLogin ? new Date(m.lastLogin).getTime() : new Date(m.accountCreated).getTime();
+        return lastActive > cutoffDate;
+    });
+    
+    if (confirm(`This will remove ${members.length - active.length} inactive members. Continue?`)) {
+        localStorage.setItem('tauAfricaDB', JSON.stringify(active));
+        showNotification(`✅ Removed ${members.length - active.length} inactive members`, 'success');
+        return members.length - active.length;
+    }
+    
+    return 0;
+}
+
+// ===== QUICK ACTIONS =====
+
+// Add quick action buttons to dashboard
+function addQuickActionsBar() {
+    const member = window.TauDB.getCurrentMember();
+    if (!member) return;
+    
+    const quickBar = document.createElement('div');
+    quickBar.id = 'quickActionsBar';
+    quickBar.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        display: flex;
+        gap: 10px;
+        z-index: 999;
+    `;
+    
+    quickBar.innerHTML = `
+        <button onclick="displayMemberStats()" style="padding: 12px 20px; background: linear-gradient(45deg, #4169e1, #87ceeb); color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            📊 Stats
+        </button>
+        <button onclick="downloadMemberCertificate()" style="padding: 12px 20px; background: linear-gradient(45deg, #2ecc71, #27ae60); color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            📥 Certificate
+        </button>
+    `;
+    
+    document.body.appendChild(quickBar);
+}
+
+// ===== INITIALIZATION =====
+
+// Initialize utilities when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('✅ Utilities Loaded');
+    
+    // Add quick actions if member is logged in
+    setTimeout(() => {
+        const member = window.TauDB?.getCurrentMember();
+        if (member) {
+            addQuickActionsBar();
+        }
+    }, 1000);
+});
+
+// Export utilities for use
+window.TauUtilities = {
+    validate: {
+        phone: validatePhone,
+        email: validateEmail,
+        memberID: validateMemberID
+    },
+    stats: {
+        getMember: getMemberStats,
+        display: displayMemberStats
+    },
+    export: {
+        certificate: downloadMemberCertificate,
+        backup: backupAllData,
+        restore: restoreFromBackup
+    },
+    cleanup: {
+        inactive: cleanupInactiveMembers
+    }
+};
+
+console.log('✅ TAU Utilities Ready');
     </script>
 </body>
                 </html>
