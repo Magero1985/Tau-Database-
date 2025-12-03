@@ -1420,6 +1420,15 @@ function showMemberLogin() {
                 <p>Use any email/password to see dashboard preview</p>
             </div>
         </div>
+        <div style="margin-top: 30px; padding: 20px; background: linear-gradient(45deg, #667eea, #764ba2); border-radius: 15px; text-align: center;">
+    <h3 style="color: white; margin-bottom: 15px;">👨‍💼 Admin & Validator Access</h3>
+    <p style="color: white; margin-bottom: 15px; font-size: 14px;">
+        Authenticate activities, tasks, and manage member data
+    </p>
+    <button class="btn" onclick="openAdminDatabase()" style="background: white; color: #667eea; font-weight: bold; width: 100%;">
+        🔐 Open Admin Dashboard
+    </button>
+</div>
     `;
     document.body.appendChild(modal);
 }
@@ -1492,7 +1501,106 @@ document.addEventListener('keydown', function(e) {
         document.getElementById('aiChatWindow').style.display = 'none';
     }
 });
+    
+// ===== ADMIN DATABASE ACCESS =====
+function openAdminDatabase() {
+    // Option 1: Open in new tab
+    const dbUrl = 'databse.html'; // Make sure this matches your database filename
+    const dbWindow = window.open(dbUrl, '_blank', 'width=1400,height=900');
+    
+    if (!dbWindow) {
+        showNotification('⚠️ Please allow popups for this site', 'error');
+        // Fallback: Open in same tab
+        window.location.href = dbUrl;
+    } else {
+        showNotification('✅ Opening Admin Dashboard...', 'success');
+    }
+}
 
+// Alternative: Open in modal iframe (if you prefer)
+function openAdminDatabaseModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 95%; max-height: 95vh; width: 1400px;">
+            <span class="close" onclick="this.parentElement.parentElement.remove()">×</span>
+            <iframe src="databse.html" style="width: 100%; height: 85vh; border: none; border-radius: 10px;"></iframe>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+    // ===== ADMIN ACCESS WITH VERIFICATION =====
+function openAdminDatabase() {
+    // Check if user has admin privileges
+    const currentMember = window.TauDB?.getCurrentMember();
+    
+    // Option 1: Check by specific Member IDs
+    const adminIds = ['TSK-000000-001', 'TLK-000000-001']; // Add your admin IDs
+    
+    // Option 2: Check by email domain
+    const adminEmails = ['admin@tauafrica.org', 'validator@tauafrica.org'];
+    
+    if (currentMember && 
+        (adminIds.includes(currentMember.id) || 
+         adminEmails.includes(currentMember.email) ||
+         currentMember.role === 'admin' || 
+         currentMember.role === 'validator')) {
+        
+        const dbWindow = window.open('databse.html', '_blank', 'width=1400,height=900');
+        
+        if (!dbWindow) {
+            showNotification('⚠️ Please allow popups', 'error');
+            window.location.href = 'databse.html';
+        } else {
+            showNotification('✅ Opening Admin Dashboard...', 'success');
+        }
+    } else {
+        // Show access request form
+        showAdminAccessRequest();
+    }
+}
+
+function showAdminAccessRequest() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="this.parentElement.parentElement.remove()">×</span>
+            <h2>🔐 Admin Access Request</h2>
+            <p>This area is restricted to admins and validators only.</p>
+            
+            <form onsubmit="requestAdminAccess(event)">
+                <div class="form-group">
+                    <label>Admin Access Code</label>
+                    <input type="password" id="adminAccessCode" placeholder="Enter admin code" required>
+                </div>
+                <button type="submit" class="btn">Verify & Access</button>
+            </form>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px;">
+                <small>Don't have access? Contact: grouptauafrica@gmail.com</small>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function requestAdminAccess(event) {
+    event.preventDefault();
+    const code = document.getElementById('adminAccessCode').value;
+    const correctCode = 'TAU2025ADMIN'; // Change this to your secret code
+    
+    if (code === correctCode) {
+        closeAllModals();
+        const dbWindow = window.open('databse.html', '_blank', 'width=1400,height=900');
+        if (!dbWindow) window.location.href = 'databse.html';
+        showNotification('✅ Access granted!', 'success');
+    } else {
+        showNotification('❌ Invalid access code', 'error');
+    }
+    }
 // ===== INITIALIZE APP =====
 document.addEventListener('DOMContentLoaded', function() {
     console.log('========================================');
@@ -3384,13 +3492,13 @@ function createForumModal() {
         // Welcome Email
     function sendWelcomeEmail(member) {
         const templateParams = {
-            to_email: member.email,
-            to_name: member.fullName,
+            to_email: formData.email,
+            to_name: formData.fullName,
             subject: '🎉 Welcome to TAU Africa',
             message: `Welcome ${member.fullName}!\n\nMember ID: ${member.id}\nReferral Code: ${member.referralCode}\n\nLogin: ${window.location.origin}\n\nEarn iKbp by:\n- Referring members: 500 iKbp\n- Completing tasks: 100-500 iKbp\n- Forum posts: 50 iKbp\n\nBalance: ${member.iKbpBalance} iKbp`,
             from_name: 'TAU Africa',
             from_email: 'grouptauafrica@gmail.com',
-            phone: member.phone,
+            from_phone: formData.phone,
             location: member.location
         };
         
@@ -3483,9 +3591,8 @@ function createForumModal() {
         showNotification(`🎁 Referral code: ${ref} - Referrer earns 500 iKbp when you register!`, 'info', 8000);
     }
 })(); 
-    </script>
-
-    <script>
+</script>
+ <script>
     // =====================================================
 // TAU AFRICA UI COMPONENTS - COMPLETE
 // =====================================================
@@ -4307,7 +4414,8 @@ function createForumModal() {
     
     console.log('✅ Limits Enforcement System initialized');
 })();
-
+</script>
+ <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/service-worker.js')
     .then(() => console.log('✅ PWA installed'))
